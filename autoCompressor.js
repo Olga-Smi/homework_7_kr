@@ -43,11 +43,10 @@ async function filesAndFolders(dataArr, folderPath) {
     }
   }
 
-  getQueue();
+  await getQueue();
 }
 
 async function checkCompressFile(data, dataPath, dataStat) {
- 
   if (dataPath.endsWith(".gz")) {
     getLogs(`Сжатый файл уже существует`);
 
@@ -57,19 +56,22 @@ async function checkCompressFile(data, dataPath, dataStat) {
       const lastCompressedDataUpdate = compressedDataStat.mtime;
 
       if (lastDataUpdate > lastCompressedDataUpdate) {
-      getLogs(`Сжатая версия устарела, добавляем в очередь на пересжатие`);
+        getLogs(`Сжатая версия устарела, добавляем в очередь на пересжатие`);
 
-      await unlink(compressedDataPath);
-      compressQueue.push({ data, dataPath });
-    } else {
-      getLogs(`Сжатая версия актуальна, пропускаем файл`);
+        await unlink(compressedDataPath);
+        compressQueue.push({ data, dataPath });
+      } else {
+        getLogs(`Сжатая версия актуальна, пропускаем файл`);
+      }
+    } catch (err) {
+      console.error(
+        `Ошибка получения статистики сжатого файла: ${err.message}`
+      );
     }
-    } catch (err) {console.error(`Ошибка получения статистики сжатого файла: ${err.message}`);}
-
   } else {
     getLogs(`Сжатая версия не найдена. Добавляем в очередь на создание`);
     compressQueue.push({ data, dataPath });
-  }  
+  }
 }
 
 async function getQueue() {
@@ -83,27 +85,30 @@ async function getQueue() {
   await getGzip(data, dataPath);
 
   compressing = false;
-  getQueue();
+  await getQueue();
 }
 
 async function getGzip(data, dataPath) {
-  const gzip = zlib.createGzip();
-  const inputStream = fs.createReadStream(dataPath);
-  const outputStream = fs.createWriteStream(`${dataPath}.gz`);
+  return new Promise((resolve, reject) => {
+    const gzip = zlib.createGzip();
+    const inputStream = fs.createReadStream(dataPath);
+    const outputStream = fs.createWriteStream(`${dataPath}.gz`);
 
-  getLogs(`Сжимаем и записываем файл: ${data}`);
-  inputStream.pipe(gzip).pipe(outputStream);
+    getLogs(`Сжимаем и записываем файл: ${data}`);
+    inputStream.pipe(gzip).pipe(outputStream);
 
-  outputStream.on("finish", () => {
-    getLogs(`Файл ${data} успешно сжат`);
-  });
+    outputStream.on("finish", () => {
+      getLogs(`Файл ${data} успешно сжат`);
+      resolve();
+    });
 
-  inputStream.on("error", (err) => {
-    console.error(`Ошибка чтения файла ${dataPath}:`, err);
-  });
+    inputStream.on("error", (err) => {
+      console.error(`Ошибка чтения файла ${dataPath}:`, err);
+    });
 
-  outputStream.on("error", (err) => {
-    console.error(`Ошибка записи сжатого файла`, err);
+    outputStream.on("error", (err) => {
+      console.error(`Ошибка записи сжатого файла`, err);
+    });
   });
 }
 
